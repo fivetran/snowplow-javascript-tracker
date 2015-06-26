@@ -46,6 +46,7 @@
 		forms = require('./forms'),
 		requestQueue = require('./out_queue'),
 		coreConstructor = require('snowplow-tracker-core'),
+		uuid = require('uuid'),
 
 		object = typeof exports !== 'undefined' ? exports : this; // For eventual node.js environment support
 
@@ -518,8 +519,13 @@
 		 * Sets the Visitor ID cookie: either the first time loadDomainUserIdCookie is called
 		 * or when there is a new visit or a new page view
 		 */
-		function setDomainUserIdCookie(_domainUserId, createTs, visitCount, nowTs, lastVisitTs) {
-			cookie.cookie(getSnowplowCookieName('id'), _domainUserId + '.' + createTs + '.' + visitCount + '.' + nowTs + '.' + lastVisitTs, configVisitorCookieTimeout, configCookiePath, configCookieDomain);
+		function setDomainUserIdCookie(_domainUserId, createTs, visitCount, nowTs, lastVisitTs, sessionId) {
+			cookie.cookie(
+				getSnowplowCookieName('id'),
+				_domainUserId + '.' + createTs + '.' + visitCount + '.' + nowTs + '.' + lastVisitTs + '.' + sessionId,
+				configVisitorCookieTimeout,
+				configCookiePath,
+				configCookieDomain);
 		}
 
 		/**
@@ -564,6 +570,7 @@
 				if (!getSnowplowCookieValue('ses')) {
 					var idCookie = loadDomainUserIdCookie();
 					idCookie[3] ++;
+					idCookie[6] = uuid.v4();
 					idCookie.shift();
 					setDomainUserIdCookie.apply(null, idCookie);
 				}
@@ -604,6 +611,11 @@
 					''
 				];
 			}
+
+			if (!tmpContainer[6]) {
+				tmpContainer[6] = uuid.v4();
+			}
+
 			return tmpContainer;
 		}
 
@@ -622,7 +634,8 @@
 				createTs = id[2],
 				visitCount = id[3],
 				currentVisitTs = id[4],
-				lastVisitTs = id[5];
+				lastVisitTs = id[5],
+				sessionId = id[6];
 
 			if (configDoNotTrack && configUseCookies && configWriteCookies) {
 				cookie.cookie(idname, '', -1, configCookiePath, configCookieDomain);
@@ -634,6 +647,7 @@
 			if (!ses && configUseCookies) {
 				// New session (aka new visit)
 				visitCount++;
+				sessionId = uuid.v4();
 				// Update the last visit timestamp
 				lastVisitTs = currentVisitTs;
 			}
@@ -642,6 +656,7 @@
 			sb.add('vp', detectors.detectViewport());
 			sb.add('ds', detectors.detectDocumentSize());
 			sb.add('vid', visitCount);
+			sb.add('sid', sessionId);
 			sb.add('duid', _domainUserId); // Set to our local variable
 			sb.add('fp', userFingerprint);
 			sb.add('uid', businessUserId);
@@ -655,7 +670,7 @@
 
 			// Update cookies
 			if (configUseCookies && configWriteCookies) {
-				setDomainUserIdCookie(_domainUserId, createTs, visitCount, nowTs, lastVisitTs);
+				setDomainUserIdCookie(_domainUserId, createTs, visitCount, nowTs, lastVisitTs, sessionId);
 				setSessionCookie();
 			}
 		}
