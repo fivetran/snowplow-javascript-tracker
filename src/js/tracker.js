@@ -778,12 +778,26 @@
 		}
 
 		/**
+		 * Combine an array of unchanging contexts with the results of an array of context-creating functions
+		 *
+		 * @param object staticContexts Array of custom contexts
+		 * @param object contextCallbacks Array of functions, each of which should return a context
+		 */
+		function finalizeContexts(staticContexts, contextCallbacks) {
+			return staticContexts.concat(lodash.map(contextCallbacks, function (f) {
+				return f();
+			}));
+		}
+
+		/**
 		 * Log the page view / visit
 		 *
 		 * @param string customTitle The user-defined page title to attach to this page view
 		 * @param object context Custom context relating to the event
+		 * @param object contextCallbacks Optional array of functions, each of which should return a context
 		 */
-		function logPageView(customTitle, context) {
+		function logPageView(customTitle, context, contextCallbacks) {
+			contextCallbacks = contextCallbacks || [];
 
 			// Fixup page title. We'll pass this to logPagePing too.
 			var pageTitle = helpers.fixupTitle(customTitle || configTitle);
@@ -791,7 +805,11 @@
 			refreshUrl();
 
 			// Log page view
-			core.trackPageView(purify(configCustomUrl || locationHrefAlias), pageTitle, purify(customReferrer || configReferrerUrl), addCommonContexts(context));
+			core.trackPageView(
+				purify(configCustomUrl || locationHrefAlias),
+				pageTitle,
+				purify(customReferrer || configReferrerUrl),
+				addCommonContexts(finalizeContexts(context, contextCallbacks)));
 
 			// Send ping (to log that user has stayed on page)
 			var now = new Date();
@@ -827,7 +845,7 @@
 					if ((lastActivityTime + configHeartBeatTimer) > now.getTime()) {
 						// Send ping if minimum visit time has elapsed
 						if (configMinimumVisitTime < now.getTime()) {
-							logPagePing(pageTitle, context); // Grab the min/max globals
+							logPagePing(pageTitle, finalizeContexts(context, contextCallbacks)); // Grab the min/max globals
 						}
 					}
 				}, configHeartBeatTimer);
@@ -1360,10 +1378,11 @@
 			 *
 			 * @param string customTitle
 			 * @param object Custom context relating to the event
+			 * @param object contextCallbacks Array of functions, each of which should return a context
 			 */
-			trackPageView: function (customTitle, context) {
+			trackPageView: function (customTitle, context, contextCallbacks) {
 				trackCallback(function () {
-					logPageView(customTitle, context);
+					logPageView(customTitle, context, contextCallbacks);
 				});
 			},
 
